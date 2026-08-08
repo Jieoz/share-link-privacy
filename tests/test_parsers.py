@@ -85,20 +85,39 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(r.id, "999")
         self.assertIn("/u/999", r.url or "")
 
-    def test_weibo_uid_path(self):
+    def test_weibo_bare_profile_is_safe(self):
+        # Matches upstream: profile URL itself is not "share leakage".
         url = "https://m.weibo.cn/u/1764919567"
+        r = parse_share_url(url, expand=False, enrich=False)
+        self.assertTrue(r.safe)
+        self.assertIsNone(r.id)
+
+    def test_weibo_share_query_uid(self):
+        url = "https://m.weibo.cn/status/ABC123?uid=1764919567"
         r = parse_share_url(url, expand=False, enrich=False)
         self.assertEqual(r.platform, "新浪微博")
         self.assertEqual(r.id, "1764919567")
 
-    def test_bilibili_mid(self):
-        url = "https://www.bilibili.com/video/BVxxx?mid=2"
+    def test_bilibili_opaque_mid_not_decoded(self):
+        url = "https://www.bilibili.com/video/BV1xx411c7mD?mid=2"
+        r = parse_share_url(url, expand=False, enrich=False)
+        self.assertEqual(r.platform, "哔哩哔哩")
+        self.assertIsNone(r.id)
+        self.assertIn("解密", r.msg)
+
+    def test_bilibili_space_path(self):
+        url = "https://space.bilibili.com/2"
         r = parse_share_url(url, expand=False, enrich=False)
         self.assertEqual(r.platform, "哔哩哔哩")
         self.assertEqual(r.id, "2")
 
-    def test_keep_users_path(self):
+    def test_keep_users_path_is_safe(self):
         url = "https://show.gotokeep.com/users/abc123"
+        r = parse_share_url(url, expand=False, enrich=False)
+        self.assertTrue(r.safe)
+
+    def test_keep_share_uid_query(self):
+        url = "https://show.gotokeep.com/entries/xyz?shareUid=abc123"
         r = parse_share_url(url, expand=False, enrich=False)
         self.assertEqual(r.platform, "Keep")
         self.assertEqual(r.id, "abc123")

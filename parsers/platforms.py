@@ -145,26 +145,27 @@ class WeiboParser(PlatformParser):
     hosts = ("weibo.com", "weibo.cn", "m.weibo.cn", "t.cn")
 
     def parse(self, url: str) -> ParseResult | None:
+        # Align with uid.ejfkdev.com: bare /u/<id> profile URLs are NOT treated as
+        # "share-link leakage" (the page already is the account). Only tracker-style
+        # query params on content/share links count.
         q = query_map(url)
-        uid = first_param(q, "uid", "luicode")  # luicode alone is not uid; filtered below
-        # Prefer explicit uid query.
-        uid = first_param(q, "uid")
-        if not uid:
-            segs = path_segments(url)
-            # /u/123456 or /123456/profile
-            for i, seg in enumerate(segs):
-                if seg in {"u", "profile"} and i + 1 < len(segs) and segs[i + 1].isdigit():
-                    uid = segs[i + 1]
-                    break
-                if seg.isdigit() and len(seg) >= 5 and i > 0 and segs[i - 1] in {"u", "n"}:
-                    uid = seg
-                    break
-            # path /1720337310/AbCdEf style status with numeric author? skip — too ambiguous
-        if not uid:
-            m = re.search(r"(?:weibo\.(?:com|cn))/u/(\d+)", url)
-            if m:
-                uid = m.group(1)
+        uid = first_param(
+            q,
+            "uid",
+            "luicode",  # sometimes co-occurs; only accept if pure digits below
+            "share_uid",
+            "shareUid",
+        )
+        if uid and not str(uid).isdigit():
+            # luicode etc. are not always the user id.
+            uid = first_param(q, "uid", "share_uid", "shareUid")
         if not uid or not str(uid).isdigit():
+            return None
+        # Ignore if the URL is already just the profile path with the same id —
+        # still OK to surface, but upstream returns safe for pure /u/ links with
+        # no extra share context. Require that path is not solely /u/<uid>.
+        segs = path_segments(url)
+        if segs == ["u", str(uid)] or (len(segs) == 1 and segs[0] == str(uid)):
             return None
         profile = f"https://m.weibo.cn/u/{uid}"
         return ParseResult(
@@ -173,7 +174,7 @@ class WeiboParser(PlatformParser):
             platform=self.name,
             id=str(uid),
             url=profile,
-            msg="已从链接中解析出微博 uid。",
+            msg="已从分享链接参数解析出微博 uid。",
         )
 
 
@@ -263,25 +264,44 @@ class BilibiliParser(PlatformParser):
 
     def parse(self, url: str) -> ParseResult | None:
         q = query_map(url)
-        mid = first_param(q, "mid", "share_mid", "uid")
-        if not mid:
-            segs = path_segments(url)
-            if "space" in segs:
-                try:
-                    mid = segs[segs.index("space") + 1]
-                except (ValueError, IndexError):
-                    mid = None
-        if not mid or not str(mid).isdigit():
-            return None
-        profile = f"https://space.bilibili.com/{mid}"
-        return ParseResult(
-            ok=True,
-            safe=False,
-            platform=self.name,
-            id=str(mid),
-            url=profile,
-            msg="已从链接解析出 mid。",
-        )
+        # Mobile share links often carry an opaque/encrypted `mid` query value.
+        # Upstream explicitly refuses to treat that as a public space id.
+        opaque_mid = first_param(q, "mid", "share_mid")
+        segs = path_segments(url)
+        host = host_of(url)
+        space_mid = None
+        if "space" in segs:
+            try:
+                space_mid = segs[segs.index("space") + 1]
+            except (ValueError, IndexError):
+                space_mid = None
+        # https://space.bilibili.com/<mid>
+        if space_mid is None and host.startswith("space.") and segs:
+            cand = segs[0]
+            if str(cand).isdigit():
+                space_mid = cand
+        if space_mid and str(space_mid).isdigit():
+            profile = f"https://space.bilibili.com/{space_mid}"
+            return ParseResult(
+                ok=True,
+                safe=False,
+                platform=self.name,
+                id=str(space_mid),
+                url=profile,
+                msg="已从 space 路径解析出 mid。",
+            )
+        if opaque_mid:
+            # Recognized platform + tracker present, but not decodable → same shape
+            # as upstream: ok without safe/id, explanatory msg.
+            return ParseResult(
+                ok=True,
+                safe=None,
+                platform=self.name,
+                id=None,
+                url=None,
+                msg="这是手机端分享的链接，mid 参数中可能含分享人信息，但当前无法解密为公开 space id。",
+            )
+        return None
 
 
 class KeepParser(PlatformParser):
@@ -289,17 +309,20 @@ class KeepParser(PlatformParser):
     hosts = ("gotokeep.com", "keep.com")
 
     def parse(self, url: str) -> ParseResult | None:
+        # Bare /users/<id> is already a profile page (upstream: 未发现分享人的账号).
+        # Only share-tracker query params count as leakage on content links.
         q = query_map(url)
-        uid = first_param(q, "shareUid", "userId", "userid", "uid")
-        if not uid:
-            segs = path_segments(url)
-            if "users" in segs:
-                try:
-                    uid = segs[segs.index("users") + 1]
-                except (ValueError, IndexError):
-                    uid = None
+        uid = first_param(q, "shareUid", "share_uid", "userId", "userid", "uid")
         if not uid:
             return None
+        segs = path_segments(url)
+        if "users" in segs:
+            try:
+                path_uid = segs[segs.index("users") + 1]
+            except (ValueError, IndexError):
+                path_uid = None
+            if path_uid and str(path_uid) == str(uid) and len(segs) <= 2:
+                return None
         profile = f"https://show.gotokeep.com/users/{uid}"
         return ParseResult(
             ok=True,
@@ -307,7 +330,7 @@ class KeepParser(PlatformParser):
             platform=self.name,
             id=str(uid),
             url=profile,
-            msg="已解析 Keep 用户标识。",
+            msg="已从分享参数解析 Keep 用户标识。",
         )
 
 

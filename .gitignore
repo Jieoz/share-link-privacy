@@ -10,3 +10,5 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+.github/workflows/
+compare-result.txt
