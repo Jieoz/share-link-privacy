@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>你分享的链接泄露隐私了吗？</title>
+  <meta name="description" content="从 App 分享链接中解析可能泄露的账号标识。隐私教育工具，本地可自托管。" />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <p class="eyebrow">Share Link Privacy</p>
+      <h1>你分享的<strong>链接</strong>泄露隐私了吗？</h1>
+      <p class="sub">多数 App 会在分享链接里塞身份追踪参数。粘贴链接，看看能不能反查出分享者账号。</p>
+    </header>
+
+    <section class="card">
+      <label class="label" for="url">输入分享的链接</label>
+      <div class="row">
+        <input id="url" type="url" spellcheck="false" autocomplete="off"
+               placeholder="https://… 粘贴小红书 / 网易云 / 微博 等分享链接"
+               value="" />
+        <button id="go" type="button">查询</button>
+      </div>
+      <p id="hint" class="hint">👀 看看你或别人分享的链接有没有泄露社交账号</p>
+      <div id="status" class="status" hidden></div>
+      <div id="result" class="result" hidden></div>
+    </section>
+
+    <section class="card prose">
+      <h2>这是什么？</h2>
+      <p>很多社交 / 内容 App 为了「你可能认识的人」、推荐与广告归因，会在分享 URL 中附带分享者标识（如 <code>appuid</code>、<code>userid</code>、<code>shareUid</code>、<code>utm_oi</code>）。</p>
+      <p>本工具<strong>不扫描社工库</strong>：只解析公开链接里已经存在的参数，并尽量拼出可打开的主页。</p>
+      <h2>已实现的平台规则</h2>
+      <ul id="platforms" class="tags"></ul>
+      <h2>使用建议</h2>
+      <ul>
+        <li>用自己的分享链接自查，比拿去查别人更有意义。</li>
+        <li>查到账号 ≠ 合法「开盒」；请遵守当地法律与平台条款。</li>
+        <li>厂商侧更优方案：服务端 <code>share_token</code> 或仅服务端可解的非对称加密，而不是明文 uid。</li>
+      </ul>
+      <p class="foot">开源复刻 · 教育用途 · <a href="https://github.com/Jieoz/share-link-privacy" id="repo">GitHub</a></p>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
